@@ -1,0 +1,189 @@
+# my Small VM for virtualization and testing 
+# root/root
+# ip, http, vlan, ifconfig, etc 
+
+# for every change in /opt/.filetool.lst; run filetool.sh -b
+
+tc@VM02:~$ more /opt/.filetool.lst
+opt
+home
+/usr/local/etc/ssh
+/etc/motd
+/etc/passwd
+/etc/shadow
+/etc/hostname
+/usr/local/etc/nginx
+/usr/local/etc/init.d/nginx
+/opt/eth0.sh
+usr/local/etc/iproute2
+usr/local/sbin/ip
+/home/tc/.profile
+
+
+######## Notes:
+usr/local/etc/iproute2
+usr/local/sbin/ip
+
+above lines are for ip commands. install iproute2
+################### 
+
+
+
+tc@VM02:~$ more /opt/bootsync.sh
+#!/bin/sh
+# put other system startup commands here, the boot process will wait until they complete.
+# Use bootlocal.sh for system startup commands that can run in the background
+# and therefore not slow down the boot process.
+/usr/bin/sethostname VM02
+/opt/bootlocal.sh &
+
+
+tc@VM02:~$ more /opt/bootlocal.sh
+#!/bin/sh
+# put other system startup commands here
+/usr/local/etc/init.d/openssh start
+/usr/local/etc/init.d/nginx start
+/opt/eth0.sh
+
+
+tc@VM02:~$ more /opt/eth0.sh
+#!/bin/sh
+# Kill the micro dhcp client (μDHCPc)
+pkill udhcpc
+
+# Set your IP address, gateway, and name server
+sudo ifconfig eth0 192.168.1.121 netmask 255.255.255.0 up
+sudo route add default gw 192.168.1.1
+
+################ main script used to set IP/netmask/gateway and DNS
+tc@VM02:~$ more ip.sh
+#!/bin/sh
+pkill -9 udhcpc
+# Prompt the user for input
+echo "Enter the IP address for eth0:"
+read ip_address
+
+echo "for 255.255.255.0 [default]"
+echo "for 255.255.252.0 enter 1"
+read choice
+if [[ -z "$choice" ]]; then
+    netmask="255.255.255.0"
+else
+    netmask="255.255.252.0"
+fi
+
+echo "Enter the gateway IP address:"
+read gateway
+
+echo "Enter the DNS IP address:"
+read dnsServer
+
+echo "IP: $ip_address"
+echo "Netmask: $netmask"
+echo "Gateway: $gateway"
+
+echo
+echo "Press any key to continue..."
+read dummy
+# Validate inputs (basic validation)
+if [[ -z "$ip_address" || -z "$netmask" || -z "$gateway" ]]; then
+    echo "Error: All fields (IP, netmask, gateway) are required."
+    exit 1
+fi
+
+# Kill the micro dhcp client (μDHCPc)
+pkill udhcpc
+
+# Bring down the interface before making changes
+echo "Bringing down eth0..."
+ifconfig eth0 down
+
+# Assign the IP address and netmask to eth0
+echo "Configuring eth0 with IP $ip_address and netmask $netmask..."
+ifconfig eth0 $ip_address netmask $netmask up
+
+# Add the default gateway
+echo "Setting the default gateway to $gateway..."
+route add default gw $gateway
+
+# Verify the configuration
+echo "Network configuration complete. Verifying settings..."
+ifconfig eth0
+route -n
+
+### set DNS server
+echo "nameserver $dnsServer" >> /etc/resolv.conf
+
+# Create or overwrite the eth0.sh script
+echo "#!/bin/sh" > /opt/eth0.sh
+
+# Add comments and commands to the eth0.sh script
+echo "# Kill the micro dhcp client (μDHCPc)" >> /opt/eth0.sh
+echo "pkill udhcpc" >> /opt/eth0.sh
+
+echo "" >> /opt/eth0.sh
+echo "# Set your IP address, gateway, and name server" >> /opt/eth0.sh
+echo "sudo ifconfig eth0 $ip_address netmask $netmask up" >> /opt/eth0.sh
+echo "sudo route add default gw $gateway" >> /opt/eth0.sh
+
+# Make the generated script executable
+chmod +x /opt/eth0.sh
+
+echo "Script created successfully at /opt/eth0.sh"
+
+# ===== FUNCTION VERSION =====
+check_and_add_eth0() {
+    local file="${1:-/opt/.filetool.lst}"
+    echo $file
+    if [[ "bootlocal" == *"$file"* ]]; then
+      echo "✓ String contains '$SEARCH'"
+      local entry="/opt/eth0.sh &"
+    else
+      local entry="/opt/eth0.sh"
+    fi
+
+    if ! grep -q "eth0" "$file" 2>/dev/null; then
+        echo "Adding eth0 entry to $file"
+        echo "$entry" | sudo tee -a "$file" > /dev/null
+        return $?
+    else
+        echo "eth0 entry already exists in $file"
+        return 0
+    fi
+}
+
+# sudo echo '/opt/eth0.sh' >> /opt/.filetool.lst
+check_and_add_eth0
+# sudo echo '/opt/eth0.sh &' >> /opt/bootlocal.sh
+check_and_add_eth0 /opt/bootlocal.sh
+
+filetool.sh -b
+echo "Done!"
+#######################################
+
+
+## some useful commands
+tce-load -wi vconfig   ## for VLAN config
+tce-load -wi iproute2      # for ip add
+
+sudo vconfig add eth0 10
+sudo ifconfig eth0.10 192.168.10.1 netmask 255.255.255.0 up
+
+sudo ip addr add 192.168.10.1/24 dev eth0.10
+sudo ip link set eth0.10 up
+
+sudo echo "modprobe 8021q" >> /opt/bootlocal.sh
+sudo echo "ip link add link eth0 name eth0.10 type vlan id 10" >> /opt/bootlocal.sh
+sudo echo "ip addr add 192.168.10.1/24 dev eth0.10" >> /opt/bootlocal.sh
+sudo echo "ip link set eth0.10 up" >> /opt/bootlocal.sh
+
+
+sudo chmod +x /opt/bootlocal.sh
+
+
+echo "/opt/bootlocal.sh" | sudo tee -a /opt/.filetool.lst
+sudo filetool.sh -b
+
+################################### 
+
+
