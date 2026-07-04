@@ -1,4 +1,4 @@
-
+```
                            +----------------------+
                            |      Upstream        |
                            |   BGP Peer (65002)   |
@@ -122,4 +122,6 @@ set system login user admin authentication encrypted-password '$6$rounds=656000$
 set system login user vyos authentication encrypted-password '$6$rounds=656000$iYgp0Ci7Oy4q7usK$Q9r5rzCO7QghJDfrg84du/KVV3Egh64esGZqiL3NUbV2ET58LpWS01oLim4Jt4I/uwcKqyKNJLaPvfmfp9ac10'  
   
 set system syslog local facility local7 level 'debug'  
-admin@router01:~$  
+admin@router01:~$
+
+```
